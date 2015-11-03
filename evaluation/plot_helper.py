@@ -50,7 +50,7 @@ def plot_2d_contour(ax_real, ax_predicted, ax_perf, task, bo):
     mean, var = np.zeros(len(X_flat)), np.zeros(len(X_flat))
     for i in range(len(X_flat)):
         mean[i], var[i] = bo.model.predict(np.array((X_flat[i], Y_flat[i]), ndmin=2))
-    Z_flat = mean
+    Z_flat = np.clip(mean, 1e-5, None)
     Z = np.reshape(Z_flat, X.shape, order="C")
 
     if task.do_scaling:
@@ -83,13 +83,13 @@ def plot_2d_contour(ax_real, ax_predicted, ax_perf, task, bo):
     else:
         ax_predicted.plot(bo.X[:, 0], bo.X[:, 1], 'x')
 
-    perf = np.minimum.accumulate(bo.Y)
-    ax_perf.set_title("performance")
-    ax_perf.set_xlabel("iteration")
-    ax_perf.set_ylabel("performance")
-    ax_perf.set_yscale('log')
-    ax_perf.plot(np.arange(1, len(perf) + 1), perf.flatten(), "o")
-    ax_perf.set_xlim((0, len(perf) + 1))
-
     if task.fopt is not None:
+        perf = bo.Y.flatten() - task.fopt
+        ax_perf.set_title("regret")
+        ax_perf.set_xlabel("iteration")
+        ax_perf.set_ylabel("regret")
+        ax_perf.set_yscale('log')
+        ax_perf.plot(np.arange(1, len(perf) + 1), perf, "o")
+        ax_perf.set_xlim((0, len(perf) + 1))
+
         plt.axhline(task.fopt, axes=ax_perf)

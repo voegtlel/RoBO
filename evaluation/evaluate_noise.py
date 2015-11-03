@@ -33,7 +33,7 @@ from robo.visualization.plotting import plot_objective_function, plot_model,\
 # It gets a numpy array with shape (N,D) where N >= 1 are the number of
 # datapoints and D are the number of features
 
-tasks = [Branin(), NoiseTask(Branin(), 0.1), NoiseTask(Branin(), 5)]
+tasks = [(Branin(), "branin"), (NoiseTask(Branin(), 0.1), "branin_0.1"), (NoiseTask(Branin(), 1), "branin_1"), (NoiseTask(Branin(), 10), "branin_10")]
 
 
 class MyPrior(BasePrior):
@@ -90,42 +90,47 @@ n_hypers = 20
 
 # Create figure with subplots
 
-for task_idx, task in enumerate(tasks):
+for task, task_name in tasks:
+    # Make 10 restarts
+    for restart_idx in range(10):
+        # Allow j restarts on failure
+        for retry_idx in range(10):
+            cov_amp = 1.0
+            config_kernel = george.kernels.Matern52Kernel(np.ones([task.n_dims]) * 0.5,
+                                                           ndim=task.n_dims)
 
-    cov_amp = 1.0
-    config_kernel = george.kernels.Matern52Kernel(np.ones([task.n_dims]) * 0.5,
-                                                   ndim=task.n_dims)
+            noise_kernel = george.kernels.WhiteKernel(0.01, ndim=task.n_dims)
+            kernel = cov_amp * (config_kernel + noise_kernel)
 
-    noise_kernel = george.kernels.WhiteKernel(0.01, ndim=task.n_dims)
-    kernel = cov_amp * (config_kernel + noise_kernel)
+            prior = MyPrior(len(kernel))
 
-    prior = MyPrior(len(kernel))
+            model = GaussianProcessMCMC(kernel, prior=prior, burnin=burnin,
+                                        chain_length=chain_length, n_hypers=n_hypers)
 
-    model = GaussianProcessMCMC(kernel, prior=prior, burnin=burnin,
-                                chain_length=chain_length, n_hypers=n_hypers)
+            acquisition_func = EI(model, X_upper=task.X_upper, X_lower=task.X_lower,
+                                  compute_incumbent=compute_incumbent, par=0.1)
 
-    acquisition_func = EI(model, X_upper=task.X_upper, X_lower=task.X_lower,
-                          compute_incumbent=compute_incumbent, par=0.1)
+            maximizer = Direct(acquisition_func, task.X_lower, task.X_upper)
 
-    maximizer = Direct(acquisition_func, task.X_lower, task.X_upper)
+            bo = BayesianOptimization(acquisition_func=acquisition_func,
+                                      model=model,
+                                      maximize_func=maximizer,
+                                      task=task,
+                                      recommendation_strategy=global_optimize_posterior,
+                                      save_dir="%s_%i" % (task_name, restart_idx))
+            try:
+                bo.run(60)
+            except ValueError:
+                continue
+            fig = plt.figure(figsize=(15, 10))
+            plt.hold(True)
+            ax_real = plt.subplot2grid((2, 2), (0, 0))
+            ax_predicted = plt.subplot2grid((2, 2), (0, 1))
+            ax_perf = plt.subplot2grid((2, 2), (1, 0), colspan=2)
 
-    bo = BayesianOptimization(acquisition_func=acquisition_func,
-                              model=model,
-                              maximize_func=maximizer,
-                              task=task,
-                              recommendation_strategy=global_optimize_posterior)
+            plot_helper.plot_2d_contour(ax_real, ax_predicted, ax_perf, task, bo)
 
-    bo.run(20)
-
-    fig = plt.figure(figsize=(15, 10))
-    plt.hold(True)
-    ax_real = plt.subplot2grid((2, 2), (0, 0))
-    ax_predicted = plt.subplot2grid((2, 2), (0, 1))
-    ax_perf = plt.subplot2grid((2, 2), (1, 0), colspan=2)
-
-    plot_helper.plot_2d_contour(ax_real, ax_predicted, ax_perf, task, bo)
-
-    plt.tight_layout()
-    plt.savefig('evaluate_noise_%i.svg' % task_idx)
+            plt.tight_layout()
+            plt.savefig('%s_%i/evaluate_noise.svg' % (task_name, restart_idx))
 
 #plt.show(block=True)
