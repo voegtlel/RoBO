@@ -91,5 +91,3 @@ def plot_2d_contour(ax_real, ax_predicted, ax_perf, task, bo):
         ax_perf.set_yscale('log')
         ax_perf.plot(np.arange(1, len(perf) + 1), perf, "o")
         ax_perf.set_xlim((0, len(perf) + 1))
-
-        plt.axhline(task.fopt, axes=ax_perf)
