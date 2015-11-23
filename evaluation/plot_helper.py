@@ -180,7 +180,9 @@ def plot_2d_contour(task, model, fig=None, ax_real=None, ax_pred_mean=None, ax_p
         plot_2d_cont(task, lambda x: np.sqrt(model.predict(x)[1]), pts_X=model.X, ax=ax_pred_var,
                      plt_title="predicted variance", logplot=False)
     if ax_perf:
-        perf = model.Y.flatten() - task.fopt
+        perf = np.zeros((model.X.shape[0],))
+        for i in range(model.X.shape[0]):
+            perf[i] = task.evaluate_test(model.X[:, np.newaxis])
         ax_perf.set_title("regret")
         ax_perf.set_xlabel("iteration")
         ax_perf.set_ylabel("regret")
