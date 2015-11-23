@@ -3,6 +3,10 @@ Created on 28.10.2015
 
 @author: Lukas Voegtle
 '''
+import matplotlib as mpl
+mpl.use('Agg')
+import matplotlib.pyplot as plt
+
 import plot_helper
 import setup_logger
 import pickle
@@ -28,13 +32,47 @@ from robo.task.base_task import BaseTask
 from robo.visualization.plotting import plot_objective_function, plot_model,\
     plot_acquisition_function
 
+import argparse
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-t", "--task", help="The task to perform (branin)", default="branin")
+parser.add_argument("-n", "--noise", type=float, help="Amount (variance) of noise to add", default=1)
+parser.add_argument("-u", "--numsteps", type=int, help="Number of iterations", default=20)
+parser.add_argument("-d", "--savedir", help="Directory to save the result to", default="")
+parser.add_argument("-s", "--seed", type=int, help="Seed", default=None)
+args = parser.parse_args()
 
 # The optimization function that we want to optimize.
 # It gets a numpy array with shape (N,D) where N >= 1 are the number of
 # datapoints and D are the number of features
 
-tasks = [(Branin(), "branin"), (NoiseTask(Branin(), 0.1), "branin_0.1"), (NoiseTask(Branin(), 1), "branin_1"), (NoiseTask(Branin(), 10), "branin_10")]
+task = None
+task_name = args.task
+savedir = args.savedir
+numsteps = args.numsteps
+if args.task == 'branin':
+    task = Branin()
+else:
+    parser.usage()
+    exit(-1)
+if args.noise > 0:
+    task = NoiseTask(task, args.noise)
+    task_name += '_%d' % args.noise
+if not savedir:
+    savedir = "%s" % (task_name)
+if args.seed is not None:
+    np.random.seed(args.seed)
 
+print "Arguments:"
+print "Task: %s" % task_name
+print "Noise: %f" % args.noise
+print "Savedir: %s" % savedir
+print "Numsteps: %i" % numsteps
+if args.seed is not None:
+    print "Seed: %i" % args.seed
+else:
+    print "Seed: Random"
 
 class MyPrior(BasePrior):
 
@@ -87,50 +125,49 @@ burnin = 100
 chain_length = 200
 n_hypers = 20
 
+cov_amp = 1.0
+config_kernel = george.kernels.Matern52Kernel(np.ones([task.n_dims]) * 0.5,
+                                               ndim=task.n_dims)
 
-# Create figure with subplots
+noise_kernel = george.kernels.WhiteKernel(0.01, ndim=task.n_dims)
+kernel = cov_amp * (config_kernel + noise_kernel)
 
-for task, task_name in tasks:
-    # Make 10 restarts
-    for restart_idx in range(10):
-        # Allow j restarts on failure
-        for retry_idx in range(10):
-            cov_amp = 1.0
-            config_kernel = george.kernels.Matern52Kernel(np.ones([task.n_dims]) * 0.5,
-                                                           ndim=task.n_dims)
+prior = MyPrior(len(kernel))
 
-            noise_kernel = george.kernels.WhiteKernel(0.01, ndim=task.n_dims)
-            kernel = cov_amp * (config_kernel + noise_kernel)
+model = GaussianProcessMCMC(kernel, prior=prior, burnin=burnin,
+                            chain_length=chain_length, n_hypers=n_hypers)
 
-            prior = MyPrior(len(kernel))
+acquisition_func = EI(model, X_upper=task.X_upper, X_lower=task.X_lower,
+                      compute_incumbent=compute_incumbent, par=0.1)
 
-            model = GaussianProcessMCMC(kernel, prior=prior, burnin=burnin,
-                                        chain_length=chain_length, n_hypers=n_hypers)
+maximizer = Direct(acquisition_func, task.X_lower, task.X_upper)
 
-            acquisition_func = EI(model, X_upper=task.X_upper, X_lower=task.X_lower,
-                                  compute_incumbent=compute_incumbent, par=0.1)
+pltFig = plt.figure(figsize=(15, 10))
 
-            maximizer = Direct(acquisition_func, task.X_lower, task.X_upper)
+class BOStepped(BayesianOptimization):
+    def __init__(self, *args, **kwargs):
+        super(BOStepped, self).__init__(*args, **kwargs)
 
-            bo = BayesianOptimization(acquisition_func=acquisition_func,
-                                      model=model,
-                                      maximize_func=maximizer,
-                                      task=task,
-                                      recommendation_strategy=global_optimize_posterior,
-                                      save_dir="%s_%i" % (task_name, restart_idx))
-            try:
-                bo.run(60)
-            except ValueError:
-                continue
-            fig = plt.figure(figsize=(15, 10))
-            plt.hold(True)
-            ax_real = plt.subplot2grid((2, 2), (0, 0))
-            ax_predicted = plt.subplot2grid((2, 2), (0, 1))
-            ax_perf = plt.subplot2grid((2, 2), (1, 0), colspan=2)
+    def iterate(self, it):
+        global pltFig
+        super(BOStepped, self).iterate(it)
+        print "--------- PLOTTING ------------"
+        plot_helper.plot_2d_contour(task, model, pltFig, True, True, True, True)
 
-            plot_helper.plot_2d_contour(ax_real, ax_predicted, ax_perf, task, bo)
+        plt.tight_layout()
+        plt.savefig('%s/plot_it_%i.svg' % (savedir, it))
 
-            plt.tight_layout()
-            plt.savefig('%s_%i/evaluate_noise.svg' % (task_name, restart_idx))
+
+bo = BOStepped(acquisition_func=acquisition_func,
+               model=model,
+               maximize_func=maximizer,
+               task=task,
+               recommendation_strategy=global_optimize_posterior,
+               save_dir=savedir)
+bo.run(numsteps)
+plot_helper.plot_2d_contour(task, model, pltFig, True, True, True, True)
+
+plt.tight_layout()
+plt.savefig('%s/plot.svg' % savedir)
 
 #plt.show(block=True)

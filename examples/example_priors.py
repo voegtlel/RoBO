@@ -3,6 +3,8 @@ Created on Oct 27, 2015
 
 @author: Aaron Klein
 '''
+from wx._controls import NB_BOTTOM
+
 import george
 import cma
 import numpy as np
@@ -12,6 +14,7 @@ from robo.priors.base_prior import BasePrior
 from robo.models.gaussian_process_mcmc import GaussianProcessMCMC
 from robo.priors import default_priors
 from robo.acquisition.ei import EI
+from robo.acquisition.entropy import  Entropy
 from robo.maximizers.direct import Direct
 from robo.solver.bayesian_optimization import BayesianOptimization
 from robo.recommendation.incumbent import compute_incumbent
@@ -65,11 +68,12 @@ def global_optimize_posterior(model, X_lower, X_upper, startpoint):
     return res[0], np.array([res[1]])
 
 
+
 burnin = 100
 chain_length = 200
 n_hypers = 20
 
-task = Branin()
+task = NoiseTask(Branin(), 0.1)
 
 cov_amp = 1.0
 config_kernel = george.kernels.Matern52Kernel(np.ones([task.n_dims]) * 0.5,
@@ -85,6 +89,7 @@ model = GaussianProcessMCMC(kernel, prior=prior, burnin=burnin,
 
 acquisition_func = EI(model, X_upper=task.X_upper, X_lower=task.X_lower,
                       compute_incumbent=compute_incumbent, par=0.1)
+
 
 maximizer = Direct(acquisition_func, task.X_lower, task.X_upper)
 

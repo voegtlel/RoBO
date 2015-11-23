@@ -35,7 +35,4 @@ class NoiseTask(BaseTask):
         return res
 
     def objective_function_test(self, x):
-        res = self.base_task.objective_function_test(x)
-        res += np.random.normal(0, self.noise_scale, res.shape)
-
-        return res
+        return self.base_task.objective_function_test(x)

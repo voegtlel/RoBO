@@ -146,50 +146,43 @@ class BayesianOptimization(BaseSolver):
         for it in range(self.init_points, num_iterations):
             logger.info("Start iteration %d ... ", it)
 
-            start_time = time.time()
-            # Choose next point to evaluate
-            if it % self.train_intervall == 0:
-                do_optimize = True
-            else:
-                do_optimize = False
-
-            new_x = self.choose_next(self.X, self.Y, do_optimize)
-
-            # Estimate current incumbent
-            self._estimate_incumbent()
-
-            time_overhead = time.time() - start_time
-            self.time_overhead = np.append(self.time_overhead, np.array([time_overhead]))
-
-            logger.info("Optimization overhead was %f seconds" % (self.time_overhead[-1]))
-
-            logger.info("Evaluate candidate %s" % (str(new_x)))
-            start_time = time.time()
-            new_y = self.task.evaluate(new_x)
-            time_func_eval = time.time() - start_time
-            self.time_func_eval = np.append(self.time_func_eval, np.array([time_func_eval]))
-
-            logger.info("Configuration achieved a performance of %f " % (new_y[0, 0]))
-
-            logger.info("Evaluation of this configuration took %f seconds" %
-                        (self.time_func_eval[-1]))
-
-            # Update the data
-            self.X = np.append(self.X, new_x, axis=0)
-            self.Y = np.append(self.Y, new_y, axis=0)
-
-            if self.save_dir is not None and (it) % self.num_save == 0:
-                hypers = self.model.hypers
-                self.save_iteration(
-                    it,
-                    hyperparameters=hypers,
-                    acquisition_value=self.acquisition_func(new_x))
-
-        # TODO: Retrain model and then return the incumbent
+            self.iterate(it)
         logger.info("Return %s as incumbent with predicted performance %f" %
                     (str(self.incumbent), self.incumbent_value))
 
         return self.incumbent, self.incumbent_value
+
+    def iterate(self, it):
+        start_time = time.time()
+        # Choose next point to evaluate
+        if it % self.train_intervall == 0:
+            do_optimize = True
+        else:
+            do_optimize = False
+        new_x = self.choose_next(self.X, self.Y, do_optimize)
+        # Estimate current incumbent
+        self._estimate_incumbent()
+        time_overhead = time.time() - start_time
+        self.time_overhead = np.append(self.time_overhead, np.array([time_overhead]))
+        logger.info("Optimization overhead was %f seconds" % (self.time_overhead[-1]))
+        logger.info("Evaluate candidate %s" % (str(new_x)))
+        start_time = time.time()
+        new_y = self.task.evaluate(new_x)
+        time_func_eval = time.time() - start_time
+        self.time_func_eval = np.append(self.time_func_eval, np.array([time_func_eval]))
+        logger.info("Configuration achieved a performance of %f " % (new_y[0, 0]))
+        logger.info("Evaluation of this configuration took %f seconds" %
+                    (self.time_func_eval[-1]))
+        # Update the data
+        self.X = np.append(self.X, new_x, axis=0)
+        self.Y = np.append(self.Y, new_y, axis=0)
+        if self.save_dir is not None and (it) % self.num_save == 0:
+            hypers = self.model.hypers
+            self.save_iteration(
+                it,
+                hyperparameters=hypers,
+                acquisition_value=self.acquisition_func(new_x))
+        # TODO: Retrain model and then return the incumbent
 
     def choose_next(self, X=None, Y=None, do_optimize=True):
         """
