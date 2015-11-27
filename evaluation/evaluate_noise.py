@@ -39,8 +39,8 @@ import argparse
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-t", "--task", choices=['branin'], help="The task to perform (branin)", default="branin")
-parser.add_argument("-i", "--incumbent", choices=['best', 'posterior', 'posterior_plus_std'], help="Type of incumbent",
-                    default="best")
+parser.add_argument("-i", "--incumbent", choices=['best', 'posterior_mean', 'posterior_mean_and_std'],
+                    help="Type of incumbent", default="best")
 parser.add_argument("-n", "--noise", type=float, help="Amount (variance) of noise to add", default=1)
 parser.add_argument("-u", "--numsteps", type=int, help="Number of iterations", default=20)
 parser.add_argument("-d", "--savedir", help="Directory to save the result to", default="")
