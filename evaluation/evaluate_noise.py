@@ -4,6 +4,8 @@ Created on 28.10.2015
 @author: Lukas Voegtle
 '''
 import matplotlib as mpl
+from robo.acquisition.integrated_acquisition import IntegratedAcquisition
+
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 
@@ -75,7 +77,9 @@ else:
     print "Seed: Random"
 
 class MyPrior(BasePrior):
-
+    """
+    Custom prior with three base priors
+    """
     def __init__(self, n_dims):
         super(MyPrior, self).__init__()
         # The number of hyperparameters
@@ -137,14 +141,19 @@ prior = MyPrior(len(kernel))
 model = GaussianProcessMCMC(kernel, prior=prior, burnin=burnin,
                             chain_length=chain_length, n_hypers=n_hypers)
 
-acquisition_func = EI(model, X_upper=task.X_upper, X_lower=task.X_lower,
-                      compute_incumbent=compute_incumbent, par=0.1)
+acq_func = EI(model, X_lower=task.X_lower, X_upper=task.X_upper,
+              compute_incumbent=compute_incumbent, par=0.1)
+acquisition_func = IntegratedAcquisition(model, acq_func) #task.X_lower, task.X_upper
 
 maximizer = Direct(acquisition_func, task.X_lower, task.X_upper)
 
 pltFig = plt.figure(figsize=(15, 10))
 
+
 class BOStepped(BayesianOptimization):
+    """
+    BO with iteration plotting
+    """
     def __init__(self, *args, **kwargs):
         super(BOStepped, self).__init__(*args, **kwargs)
 

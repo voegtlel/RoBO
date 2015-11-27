@@ -8,6 +8,7 @@ from wx._controls import NB_BOTTOM
 import george
 import cma
 import numpy as np
+from robo.acquisition.integrated_acquisition import IntegratedAcquisition
 
 from robo.task.branin import Branin
 from robo.priors.base_prior import BasePrior
@@ -87,8 +88,9 @@ prior = MyPrior(len(kernel))
 model = GaussianProcessMCMC(kernel, prior=prior, burnin=burnin,
                             chain_length=chain_length, n_hypers=n_hypers)
 
-acquisition_func = EI(model, X_upper=task.X_upper, X_lower=task.X_lower,
-                      compute_incumbent=compute_incumbent, par=0.1)
+acq_func = EI(model, X_lower=task.X_lower, X_upper=task.X_upper,
+              compute_incumbent=compute_incumbent, par=0.1)
+acquisition_func = IntegratedAcquisition(model, acq_func, task.X_lower, task.X_upper)
 
 
 maximizer = Direct(acquisition_func, task.X_lower, task.X_upper)
