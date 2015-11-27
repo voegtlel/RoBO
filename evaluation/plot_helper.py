@@ -101,7 +101,7 @@ def plot_2d_cont(task, eval_fn, pts_X=None, numpts=50, ax=None, clip_min=None, c
     return ax, CS, implt, cb
 
 
-def plot_2d_contour(task, model, fig=None, ax_real=None, ax_pred_mean=None, ax_pred_var=None, ax_perf=None):
+def plot_2d_contour(task, model, incumbents=None, fig=None, ax_real=None, ax_pred_mean=None, ax_pred_var=None, ax_perf=None):
     """
     Plots the 2d contours for the given task an the model.
 
@@ -110,6 +110,7 @@ def plot_2d_contour(task, model, fig=None, ax_real=None, ax_pred_mean=None, ax_p
     task: robo.task.base_task.BaseTask
         Task to evaluate
     model: robo.models.base_model.BaseModel
+    incumbents: np.array|None
     fig: matplotlib.figure.Figure|None
     ax_real: matplotlib.Axes|True|None
     ax_pred_mean: matplotlib.Axes|True|None
@@ -179,10 +180,10 @@ def plot_2d_contour(task, model, fig=None, ax_real=None, ax_pred_mean=None, ax_p
     if ax_pred_var:
         plot_2d_cont(task, lambda x: np.sqrt(model.predict(x)[1]), pts_X=model.X, ax=ax_pred_var,
                      plt_title="predicted variance", logplot=False)
-    if ax_perf:
-        perf = np.zeros((model.X.shape[0],))
-        for i in range(model.X.shape[0]):
-            perf[i] = task.evaluate_test(model.X[i, np.newaxis])
+    if ax_perf and incumbents is not None:
+        perf = np.zeros((incumbents.shape[0],))
+        for i in range(incumbents.shape[0]):
+            perf[i] = task.evaluate_test(incumbents[i, np.newaxis])
         ax_perf.set_title("regret")
         ax_perf.set_xlabel("iteration")
         ax_perf.set_ylabel("regret")

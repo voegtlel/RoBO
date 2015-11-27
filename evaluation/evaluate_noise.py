@@ -38,11 +38,13 @@ import argparse
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-t", "--task", help="The task to perform (branin)", default="branin")
+parser.add_argument("-t", "--task", choices=['branin'], help="The task to perform (branin)", default="branin")
+parser.add_argument("-i", "--incumbent", choices=['best', 'posterior', 'posterior_plus_std'], help="Type of incumbent",
+                    default="best")
 parser.add_argument("-n", "--noise", type=float, help="Amount (variance) of noise to add", default=1)
 parser.add_argument("-u", "--numsteps", type=int, help="Number of iterations", default=20)
 parser.add_argument("-d", "--savedir", help="Directory to save the result to", default="")
-parser.add_argument("-s", "--seed", type=int, help="Seed", default=None)
+parser.add_argument("-s", "--seed", type=int, help="Seed (random if not specified)", default=None)
 args = parser.parse_args()
 
 # The optimization function that we want to optimize.
@@ -68,6 +70,7 @@ if args.seed is not None:
 
 print "Arguments:"
 print "Task: %s" % task_name
+print "Incumbent: %s" % args.incumbent
 print "Noise: %f" % args.noise
 print "Savedir: %s" % savedir
 print "Numsteps: %i" % numsteps
@@ -116,13 +119,36 @@ class MyPrior(BasePrior):
         return p0
 
 
-def global_optimize_posterior(model, X_lower, X_upper, startpoint):
-    def f(x):
-        mu, var = model.predict(x[np.newaxis, :])
-        return (mu + np.sqrt(var))[0, 0]
-    # Use CMAES to optimize the posterior mean + std
-    res = cma.fmin(f, startpoint, 0.6, options={"bounds": [X_lower, X_upper]})
-    return res[0], np.array([res[1]])
+def get_recommendation_strategy(strategy):
+    """
+    Gets the recommendation strategy for a name
+    """
+    if strategy == 'best':
+        return compute_incumbent
+    elif strategy == 'posterior_mean' or strategy == 'posterior_mean_and_std':
+        if strategy == 'posterior_mean':
+            def f(x):
+                """
+                Function for optimization returns (mean)
+                """
+                mu, var = model.predict(x[np.newaxis, :])
+                return mu[0, 0]
+        elif strategy == 'posterior_mean_and_std':
+            def f(x):
+                """
+                Function for optimization returns (mean + sqrt(variance))
+                """
+                mu, var = model.predict(x[np.newaxis, :])
+                return (mu + np.sqrt(var))[0, 0]
+
+        def global_optimize_posterior(model, X_lower, X_upper, startpoint):
+            """
+            Optimizes the incumbent
+            """
+            # Use CMAES to optimize the posterior mean + std
+            res = cma.fmin(f, startpoint, 0.6, options={"bounds": [X_lower, X_upper]})
+            return res[0], np.array([res[1]])
+        return global_optimize_posterior
 
 
 burnin = 100
@@ -152,16 +178,28 @@ pltFig = plt.figure(figsize=(15, 10))
 
 class BOStepped(BayesianOptimization):
     """
-    BO with iteration plotting
+    BO with iteration plotting and incumbent history
     """
     def __init__(self, *args, **kwargs):
         super(BOStepped, self).__init__(*args, **kwargs)
+        self.incumbents = None;
 
     def iterate(self, it):
+        """
+        Custom iteration delegates to the default iteration and stores metadata
+        """
         global pltFig
         super(BOStepped, self).iterate(it)
+
+        # Perform metadata storage/plot generation
         print "--------- PLOTTING ------------"
-        plot_helper.plot_2d_contour(task, model, pltFig, True, True, True, True)
+        if self.incumbents is None:
+            self.incumbents = np.zeros((1, self.task.n_dims))
+            self.incumbents[0, :] = self.incumbent
+        else:
+            self.incumbents = np.append(self.incumbents, np.array(self.incumbent, ndmin=2), axis=0)
+
+        plot_helper.plot_2d_contour(task, model, self.incumbents, pltFig, True, True, True, True)
 
         plt.tight_layout()
         plt.savefig('%s/plot_it_%i.svg' % (savedir, it))
@@ -171,10 +209,10 @@ bo = BOStepped(acquisition_func=acquisition_func,
                model=model,
                maximize_func=maximizer,
                task=task,
-               recommendation_strategy=global_optimize_posterior,
+               recommendation_strategy=get_recommendation_strategy(args.incumbent),
                save_dir=savedir)
 bo.run(numsteps)
-plot_helper.plot_2d_contour(task, model, pltFig, True, True, True, True)
+plot_helper.plot_2d_contour(task, model, bo.incumbents, pltFig, True, True, True, True)
 
 plt.tight_layout()
 plt.savefig('%s/plot.svg' % savedir)
