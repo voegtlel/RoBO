@@ -183,7 +183,7 @@ def plot_2d_contour(task, model, incumbents=None, fig=None, ax_real=None, ax_pre
     if ax_perf and incumbents is not None:
         perf = np.zeros((incumbents.shape[0],))
         for i in range(incumbents.shape[0]):
-            perf[i] = task.evaluate_test(incumbents[i, np.newaxis])
+            perf[i] = task.evaluate_test(incumbents[i, np.newaxis]) - task.fopt
         ax_perf.set_title("regret")
         ax_perf.set_xlabel("iteration")
         ax_perf.set_ylabel("regret")
