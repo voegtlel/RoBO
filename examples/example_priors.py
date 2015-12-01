@@ -3,23 +3,19 @@ Created on Oct 27, 2015
 
 @author: Aaron Klein
 '''
-from wx._controls import NB_BOTTOM
-
 import george
 import cma
 import numpy as np
-from robo.acquisition.integrated_acquisition import IntegratedAcquisition
 
 from robo.task.branin import Branin
 from robo.priors.base_prior import BasePrior
 from robo.models.gaussian_process_mcmc import GaussianProcessMCMC
 from robo.priors import default_priors
 from robo.acquisition.ei import EI
-from robo.acquisition.entropy import  Entropy
+from robo.acquisition.integrated_acquisition import IntegratedAcquisition
 from robo.maximizers.direct import Direct
 from robo.solver.bayesian_optimization import BayesianOptimization
 from robo.recommendation.incumbent import compute_incumbent
-from robo.task.noise_task import NoiseTask
 
 
 class MyPrior(BasePrior):
@@ -49,13 +45,13 @@ class MyPrior(BasePrior):
     def sample_from_prior(self, n_samples):
         p0 = np.zeros([n_samples, self.n_dims])
         # Covariance amplitude
-        p0[:, 0] = self.ln_prior.sample_from_prior(n_samples)
+        p0[:, 0] = self.ln_prior.sample_from_prior(n_samples)[:, 0]
         # Lengthscales
-        ls_sample = np.array([self.tophat.sample_from_prior(n_samples)
+        ls_sample = np.array([self.tophat.sample_from_prior(n_samples)[:, 0]
                               for _ in range(1, (self.n_dims - 1))]).T
         p0[:, 1:(self.n_dims - 1)] = ls_sample
         # Noise
-        p0[:, -1] = self.horseshoe.sample_from_prior(n_samples)
+        p0[:, -1] = self.horseshoe.sample_from_prior(n_samples)[:, 0]
 
         return p0
 
@@ -74,7 +70,7 @@ burnin = 100
 chain_length = 200
 n_hypers = 20
 
-task = NoiseTask(Branin(), 0.1)
+task = Branin()
 
 cov_amp = 1.0
 config_kernel = george.kernels.Matern52Kernel(np.ones([task.n_dims]) * 0.5,

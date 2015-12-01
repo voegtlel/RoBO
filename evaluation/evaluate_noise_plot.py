@@ -6,32 +6,14 @@ Created on 24.11.2015
 import setup_logger
 
 import matplotlib as mpl
-#mpl.use('Agg')
+mpl.use('Agg')
 
-import plot_helper
-import pickle
-import cma
-import george
-from robo.maximizers.direct import Direct
-from robo.models.gaussian_process_mcmc import GaussianProcessMCMC
-from robo.priors import default_priors
-from robo.priors.base_prior import BasePrior
-from robo.solver.bayesian_optimization import BayesianOptimization
 from robo.task.branin import Branin
-from robo.task.noise_task import NoiseTask
 
-import GPy
 import matplotlib.pyplot as plt
 import numpy as np
 import glob
 
-from robo.models.gpy_model import GPyModel
-from robo.acquisition.ei import EI
-from robo.maximizers.grid_search import GridSearch
-from robo.recommendation.incumbent import compute_incumbent
-from robo.task.base_task import BaseTask
-from robo.visualization.plotting import plot_objective_function, plot_model,\
-    plot_acquisition_function
 from robo.util.output_reader import OutputReader
 import os.path
 import re
@@ -52,7 +34,7 @@ reader = OutputReader()
 
 resultPaths = glob.glob(os.path.join(savedir, '**', 'results.csv'))
 
-dirnameRe = re.compile(r'(?P<task>\w+)_(?P<noise>[\d.]+)_(?P<run>\d+)')
+dirnameRe = re.compile(r'^(?P<task>[a-zA-Z]+)_(?P<incumbent>[\w_]+)_(?P<noise>[\d.]+)_(?P<run>\d+)$')
 
 resultGroups = dict()
 
@@ -65,34 +47,45 @@ for resultPath in resultPaths:
     task = groups['task']
     if task <> 'branin':
         raise Exception("Invalid task: " + task)
+    incumbent = groups['incumbent']
     noise = groups['noise']
-    if not resultGroups.has_key(noise):
-        resultGroups[noise] = {'paths': [], 'incumbents': None, 'incumbent_vals': None}
-    resultGroups[noise]['paths'].append(resultPath)
+    print "Plotting", task, incumbent, noise
+    if not resultGroups.has_key(incumbent):
+        resultGroups[incumbent] = dict()
+    if not resultGroups[incumbent].has_key(noise):
+        resultGroups[incumbent][noise] = {'paths': [], 'incumbents': None, 'incumbent_vals': None}
+    resultGroups[incumbent][noise]['paths'].append(resultPath)
 
 task = Branin()
 
-for noise, resultGroup in resultGroups.iteritems():
-    resultGroup['incumbents'] = np.zeros((len(resultGroup['paths']), 100, 2))
-    resultGroup['incumbent_vals'] = np.zeros((len(resultGroup['paths']), 100))
+for incumbent, resultGroupN in resultGroups.iteritems():
+    for noise, resultGroup in resultGroupN.iteritems():
+        resultGroup['incumbents'] = np.zeros((len(resultGroup['paths']), 100, 2))
+        resultGroup['incumbent_vals'] = np.zeros((len(resultGroup['paths']), 100))
 
-    for i, resultPath in enumerate(resultGroup['paths']):
-        results = reader.read_results_file(resultPath)
-        while len(results['incumbent']) < 100:
-            results['incumbent'].append(results['incumbent'][-1])
-        resultGroup['incumbents'][i, :, :] = results['incumbent']
+        for i, resultPath in enumerate(resultGroup['paths']):
+            results = reader.read_results_file(resultPath)
+            while len(results['incumbent']) < 100:
+                results['incumbent'].append(results['incumbent'][-1])
+            resultGroup['incumbents'][i, :, :] = results['incumbent']
 
-    for i in range(len(resultGroup['paths'])):
-        for j in range(100):
-            resultGroup['incumbent_vals'][i, j] = task.evaluate_test(resultGroup['incumbents'][i, j, np.newaxis]) - task.fopt
-    mean = np.mean(resultGroup['incumbent_vals'], 0)
+        for i in range(len(resultGroup['paths'])):
+            for j in range(100):
+                resultGroup['incumbent_vals'][i, j] = task.evaluate_test(resultGroup['incumbents'][i, j, np.newaxis]) - task.fopt
+        mean = np.mean(resultGroup['incumbent_vals'], 0)
 
-    plt.figure()
-    plt.title("Noise: %s" % noise)
-    plt.plot(mean)
-    plt.yscale('log')
-    plt.xlabel('iteration')
-    plt.ylabel('regret (f(inc)-fopt)')
-    plt.savefig('accum_%s.svg' % noise)
+        median = np.median(resultGroup['incumbent_vals'], axis=0)
+        lower = median - np.percentile(resultGroup['incumbent_vals'], 5, axis=0)
+        upper = median + np.percentile(resultGroup['incumbent_vals'], 95, axis=0)
+
+        plt.figure()
+        plt.title("Noise: %s, Inc: %s" % (incumbent, noise))
+        #plt.plot(mean)
+        plt.plot(median)
+        plt.fill_between(list(range(len(median))), upper, lower)
+        plt.yscale('log')
+        plt.xlabel('iteration')
+        plt.ylabel('regret (f(inc)-fopt)')
+        plt.savefig('accum_%s_%s.svg' % (incumbent, noise))
 
 plt.show(block=True)

@@ -108,5 +108,5 @@ class GaussianProcess(BaseModel):
             raise ValueError
 
         mu, var = self.model.predict(self.Y[:, 0], X)
-
+        var[var < 0.0] = 0.0
         return mu, var
