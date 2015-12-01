@@ -18,11 +18,12 @@ logger = logging.getLogger(__name__)
 
 class GaussianProcess(BaseModel):
 
-    def __init__(self, kernel, prior=None, mean=0, *args, **kwargs):
+    def __init__(self, kernel, prior=None, mean=0, yerr = 1e-25, *args, **kwargs):
         self.kernel = kernel
         self.model = None
         self.mean = mean
         self.prior = prior
+        self.yerr = yerr
 
     def scale(self, x, new_min, new_max, old_min, old_max):
         return ((new_max - new_min) *
@@ -37,10 +38,10 @@ class GaussianProcess(BaseModel):
         self.model = george.GP(self.kernel, mean=self.mean)
 
         # Precompute the covariance
-        yerr = 1e-25
+        
         while(True):
             try:
-                self.model.compute(self.X, yerr=yerr)
+                self.model.compute(self.X, yerr=self.yerr)
                 break
             except np.linalg.LinAlgError:
                 yerr *= 10
@@ -80,7 +81,7 @@ class GaussianProcess(BaseModel):
         self.model.kernel[:] = theta
 
         gll = self.model.grad_lnlikelihood(self.Y[:, 0], quiet=True)
-        gll += self.prior.gradients(theta)
+        gll += self.prior.gradient(theta)
         return -gll
 
     def optimize(self):
@@ -92,9 +93,18 @@ class GaussianProcess(BaseModel):
 
     def predict_variance(self, X1, X2):
         # Predict the variance between two test points X1, X2 by
-        #Sigma(X1, X2) = k_X1,X2 - k_X1,X * (K_X,X + simga^2*I)^-1 * k_X,X2)
+        # Sigma(X1, X2) = k_X1,X2 - k_X1,X * (K_X,X + sigma^2*I)^-1 * k_X,X2)
+
         var = self.kernel.value(X1, X2) - np.dot(self.kernel.value(X1, self.X),
                 self.model.solver.apply_inverse(self.kernel.value(self.X, X2)))
+
+        print var
+        KbX = self.kernel.value(X2, self.X)
+        Kx = self.kernel.value(X1, self.X).T
+        WiKx = self.model.solver.apply_inverse(Kx)
+        Kbx = self.kernel.value(X2, X1)
+        var = Kbx - np.dot(KbX, WiKx)
+        print var
         return var
 
     def predict(self, X, **kwargs):
